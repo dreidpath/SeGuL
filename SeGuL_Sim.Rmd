@@ -1,0 +1,269 @@
+---
+title: "SeGuL Simulation"
+author: "Daniel D. Reidpath and Mark R. Diamond"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load necessary libraries
+library(tidyverse)
+library(patchwork)
+```
+
+# Background
+
+In the tradition of literary programming, this R Markdown document is both an explanation of the SeGuL simulation and the simulation itself. The document is broken up into four distinct sections:
+
+1.  Functions (called during the execution of the simulation);
+2.  Initialisation (of key variables);
+3.  Main (loop, for running the simulation); and
+4.  Results (for displaying Figures and Tables described in Diamond & Reidpath (1993/2024)).
+
+# Functions
+
+There are three core functions to the self guided, inductive learning simulation:
+
+-   A case generation function that will be used to generate sets of *n* cases at a time: generate_case();
+-   A case selection function which will select the "best" positive case from a set of *n* cases: select_case(); and
+-   A function to update rule for case selection based on the addition of the newly selected case: update_rule().
+
+Diamond and Reidpath (1993) described the "rule" for selecting cases in the following terms. Cases were selected according to the following procedure:
+
+1.  For each of the five current cases (in round $i+1$) calculate: value = $a_{i1}x_1 + a_{i2}x_2 +...+ a_{i6}x_6$, where "$a_{i1}, a_{i2}, ..., a_{i6}$" represented the rule $R_i$.
+2.  Select the case for which value was greatest, and add the case to the list L.
+
+In other words, for each block of five cases, select $max(value)$ and add that case to the database of predicted positive cases.
+
+```{r functions}
+# Function to generate a case(s)
+generate_case <- function(cutoff = "random", n = 1) {
+  # Generate 'n' sets of 6 random normal deviates for attributes (x1 to x6)
+  x_values <- matrix(rnorm(6 * n), ncol = 6)
+  
+  # Calculate the sum of x_values for each set
+  sums <- rowSums(x_values)
+  
+  # Determine 'y_values' based on 'cutoff'
+  y_values <- switch(
+    cutoff,
+    "EW50" = as.integer(sums > 0),        # Criterion EW50
+    "EW27" = as.integer(sums > 1.5),      # Criterion EW27
+    "EW5"  = as.integer(sums > 4),        # Criterion EW5 
+    "XOR" =  {
+      result <- numeric(n)
+      for (i in 1:n) {
+        result[i] <- ifelse(xor(sum(x_values[i, 1:3]) > 1.5, sum(x_values[i, 4:6]) > 1.5), 1, 0)
+      }
+      result
+    },
+    "random" = sample(0:1, n, replace = TRUE), # Random data for seeding
+    stop("Invalid cutoff specified.")
+  )
+  
+  # Create the resulting data frame
+  data <- data.frame(x1 = x_values[, 1],
+                     x2 = x_values[, 2],
+                     x3 = x_values[, 3],
+                     x4 = x_values[, 4],
+                     x5 = x_values[, 5],
+                     x6 = x_values[, 6],
+                     y = y_values)
+  
+  return(data)
+}
+
+
+# Function to select a case based on the rule
+select_case <- function(cases, rule) {
+  # Calculate the weighted sum for each row using matrix multiplication
+  weighted_sum <- as.matrix(cases[, 1:6]) %*% rule
+  
+  # Find the row index with the maximum weighted sum
+  max_row_index <- which.max(weighted_sum)
+  
+  # Return the row with the maximum weighted sum
+  selected_case <- cases[max_row_index, ]
+  
+  return(selected_case)
+}
+
+
+# Function to update the rule using linear regression
+update_rule <- function(L) {
+  # Fit a linear regression model and extract the Rule
+ lm(y ~ x1 + x2 + x3 + x4 + x5 + x6, data = L)$coef[2:7]  # Exclude the intercept (b0)
+}
+```
+
+# Initialisation
+
+Four objects need to be initialised at the beginning of the simulation:
+
+-   A database (dataframe) of 8 uninformative cases from which to seed SeGuL: *L* ; and
+-   The initial rule on which to select cases: *R*;
+-   An integer for the number of cases to be simultaneously evaluated by case_select(): *n*. In Diamond & Reidpath(1993) we evaluated blocks of 5 cases at a time, and we stick to that here; and
+-   The number of times SeGuL selects 1 case from n cases: *number_of_iterations*.
+
+The main difference between the approach we take here and the approach we took in 1993 is that, in 1993 we generated a database of 3,000 ahead of time. Here we do it on-the-fly. The SeGuLer would loop through the database evaluating blocks of 5 cases at a time. That means there were 600 total iterations. We preserve that in the code below. However, in generating the random data ahead of time, we could guarantee that the intercorrelation matrix between the predictors ($x_1,..,x_n$) contained only low values ($r<.05$). Here we can only be certain that the data intercorrelation matrix will tend to low values but, by chance alone, some $r$ may be $>.05$.
+
+```{r initialisation}
+# Initialise
+iL <- generate_case("random", 8)  # Seed the database with 8 uninformative cases 
+iR <- update_rule(iL)  # Generate an initial (uninformed) rule 
+n <- 5  # Evaluate 5 cases at a time
+number_of_iterations <- 600  
+
+# For generating the results, rather than a core part of SeGuL
+# Keep a copy of the data generated on the fly
+db <- iL[, 1:6]  # Start with the 8 uninformative seed cases
+# Keep a copy of the Rules
+ia_weights <- as.data.frame(matrix(iR, ncol = 6))
+colnames(ia_weights) <- paste0("a", 1:6)
+# create an empty list to store outputs
+outputs <- list()
+```
+
+# Main
+
+Something here...
+
+```{r main}
+# Main loop for SeGuL algorithm
+for(i in c("EW50","EW27", "EW5","XOR")){
+  set.seed(9361) # This ensures that the "database" of cases will be the same for each i
+  L <- iL  # set the initial condition for the seed prior to each model EW50, EW27, EW5
+  R <- iR  # set the initial rule
+  a_weights <- ia_weights  # Create the a_weights record
+  
+  
+  for (j in 1:number_of_iterations) {
+    # "Read" next n cases from the database
+    cases <- generate_case(i, n)
+    
+    # Select case
+    selected_case <- select_case(cases, R)
+    L <- rbind(L, selected_case)
+    
+    # Update rule
+    R <- update_rule(L)
+    a_weights <- rbind(a_weights, R)  # Record changing rules
+    
+    # Save new cases into the "database"
+    if(i == "EW50"){
+      db <- rbind(db, cases[, 1:6])
+    }
+  }
+  # Add outputs to a list
+  outputs[[i]] <- list(L = L, a_weights = a_weights)
+}
+
+```
+
+
+# Results
+
+We start by looking at the correlation matrix of the $3000$ cases generated during the simulation. The random number generator we used in 1993 was not great and it took some work to ensure that none of the pairs ($x_1,..,x_6$) had an $r>.05$.  In this data set, the maximum off-diagonal correlation was `r round(max(cor(db[9:3008, ])[abs(cor(db[9:3008, ]))<1]), 3)`.
+
+We then need to determine (i) the proportion of positive cases (according to each )
+
+## Table 2
+
+```{r table2, echo=FALSE}
+osr <- NULL
+asr <- NULL
+br <- NULL
+
+# Calculate the probabilities for EW50 
+p_ew50 <- 1 - pnorm(0, mean = 0, sd = sqrt(6))
+
+osr[1] <- round((1 - p_ew50^5)*100)
+asr[1] <- round(sum(outputs$EW50$L$y[9:608])/6)
+br[1] <- round(p_ew50*100)
+
+# Calculate the probabilities for EW27 
+p_ew27 <- 1 - pnorm(1.5, mean = 0, sd = sqrt(6))
+
+osr[2] <- round((1 - (1-p_ew27)^5)*100)
+asr[2] <- round(sum(outputs$EW27$L$y[9:608])/6)
+br[2] <- round(p_ew27*100)
+
+
+# Calculate the probabilities for EW5 
+p_ew5 <- 1 - pnorm(4, mean = 0, sd = sqrt(6))
+
+osr[3] <- round((1 - (1-p_ew5)^5)*100)
+asr[3] <- round(sum(outputs$EW5$L$y[9:608])/6)
+br[3] <- round(p_ew5*100)
+
+# Calculate the probabilities for XOR
+p <- 1 - pnorm(1.5, mean = 0, sd = sqrt(3)) 
+p_xor <- 2*p - (2 * p^2)
+
+osr[4] <- round((1 - (1-p_xor)^5)*100)
+asr[4] <- round(sum(outputs$XOR$L$y[9:608])/6)
+br[4] <- round(p_xor*100)
+
+```
+
+Optimal positive case selection (OSR), the actual positive case selection rate (ASR), and the base rate of positive cases for each of the four learners: the three equal weights models ($EW_{50}$, $EW_{27}$, and $EW_{5}$), and the logical exclusive or ($XOR$) model.
+
+| Mode      | OSR | ASR  | Base rate |
+|-----------|-----|------|:---------:|
+|$EW_{50}$  | `r osr[1]` | `r asr[1]` | `r br[1]` |
+|$EW_{27}$  | `r osr[2]` | `r asr[2]` | `r br[2]` |
+|$EW_{5}$   | `r osr[3]` | `r asr[3]` | `r br[3]` |
+|$XOR$      | `r osr[4]` | `r asr[4]` | `r br[4]` |
+
+## Table 3
+The distribution of cases selected during the XOR simulation.
+
+```{r table 3, echo=FALSE}
+
+w1 <- rowSums(outputs$XOR$L[, 1:3])
+w2 <- rowSums(outputs$XOR$L[, 4:6])
+
+```
+
+
+
+|           | $w_1<1.5$ | $w_1>1.5$  |
+|-----------|:---------:|:----------:|
+|$w_2<1.5$  | `r sum(w1<1.5 & w2<1.5)`|`r sum(w1>1.5 & w2<1.5)`|
+|$w_2>1.5$  |`r sum(w1<1.5 & w2>1.5)`|`r sum(w1>1.5 & w2>1.5)`| 
+
+
+
+## Figures 4a..4d
+
+```{r fig, fig.cap = "Learning over time", warning=FALSE}
+
+
+aweight_plot <- function(aw_frame, p_title = "Learning over time"){
+  p <- aw_frame %>%
+    mutate(row_number = row_number()) %>%
+    pivot_longer(
+      cols = a1:a6,
+      names_to = "variable",
+      values_to = "value"
+    ) %>% 
+    ggplot(aes(x = row_number, y = value, color = variable, group = variable)) +
+    geom_line() +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    labs(x = "Selected cases", y = "Weight", title = p_title)
+  
+  return(p)
+}
+
+
+p50 <- aweight_plot(outputs$EW50$a_weights[9:608,], p_title = "EW50")
+p27 <- aweight_plot(outputs$EW27$a_weights[9:608,], p_title = "EW27")
+p5 <- aweight_plot(outputs$EW5$a_weights[9:608,], p_title = "EW5")
+pxor <- aweight_plot(outputs$XOR$a_weights[9:608,], p_title = "XOR")
+
+(p50 + p27)/(p5 + pxor)
+
+```
+
