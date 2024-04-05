@@ -1,5 +1,5 @@
 ---
-title: "SeGuL Simulation"
+title: "SeGuL Supplementary Material"
 author: "Daniel D. Reidpath and Mark R. Diamond"
 date: "`r Sys.Date()`"
 output: pdf_document
@@ -14,7 +14,7 @@ library(patchwork)
 
 # Background
 
-In the tradition of literary programming, this R Markdown document is both an explanation of the SeGuL simulation and the simulation itself. The document is broken up into four distinct sections:
+In the tradition of literary programming, this R Markdown document is both an explanation of the SeGuL simulation and the simulation itself.^[doi:10.5281/zenodo.10931640] The document is broken up into four distinct sections:
 
 1.  Functions (called during the execution of the simulation);
 2.  Initialisation (of key variables);
@@ -29,12 +29,12 @@ There are three core functions to the self guided, inductive learning simulation
 -   A case selection function which will select the "best" positive case from a set of *n* cases: select_case(); and
 -   A function to update rule for case selection based on the addition of the newly selected case: update_rule().
 
-Diamond and Reidpath (1993) described the "rule" for selecting cases in the following terms. Cases were selected according to the following procedure:
+Diamond and Reidpath (1993) described the "rule" for selecting cases according to the following procedure:
 
 1.  For each of the five current cases (in round $i+1$) calculate: value = $a_{i1}x_1 + a_{i2}x_2 +...+ a_{i6}x_6$, where "$a_{i1}, a_{i2}, ..., a_{i6}$" represented the rule $R_i$.
 2.  Select the case for which value was greatest, and add the case to the list L.
 
-In other words, for each block of five cases, select $max(value)$ and add that case to the database of predicted positive cases.
+In other words, for each block of five cases, select $max(value)$ and add that case to the database of predicted positive cases (which is used as the learning database to update the selection rule).
 
 ```{r functions}
 # Function to generate a case(s)
@@ -101,12 +101,12 @@ update_rule <- function(L) {
 
 Four objects need to be initialised at the beginning of the simulation:
 
--   A database (dataframe) of 8 uninformative cases from which to seed SeGuL: *L* ; and
+-   A database (dataframe) of 8 uninformative cases from which to seed SeGuL: *L* ;
 -   The initial rule on which to select cases: *R*;
 -   An integer for the number of cases to be simultaneously evaluated by case_select(): *n*. In Diamond & Reidpath(1993) we evaluated blocks of 5 cases at a time, and we stick to that here; and
 -   The number of times SeGuL selects 1 case from n cases: *number_of_iterations*.
 
-The main difference between the approach we take here and the approach we took in 1993 is that, in 1993 we generated a database of 3,000 ahead of time. Here we do it on-the-fly. The SeGuLer would loop through the database evaluating blocks of 5 cases at a time. That means there were 600 total iterations. We preserve that in the code below. However, in generating the random data ahead of time, we could guarantee that the intercorrelation matrix between the predictors ($x_1,..,x_n$) contained only low values ($r<.05$). Here we can only be certain that the data intercorrelation matrix will tend to low values but, by chance alone, some $r$ may be $>.05$.
+The main difference between the approach we take here and the approach we took in 1993 is that, in 1993 we generated a database of 3,000 cases ahead of time. Here, we do it on-the-fly. The SeGuLer looped through the database evaluating blocks of 5 cases at a time. That means there were 600 total iterations. We preserve that in the code below. However, in generating the random data ahead of time (in 1993), we could guarantee that the intercorrelation matrix between the predictors ($x_1,..,x_n$) contained only low values ($r<.05$). Here we can only be certain that the data intercorrelation matrix will tend to low values but, by chance alone, some $r$ may be $>.05$.
 
 ```{r initialisation}
 # Initialise
@@ -127,7 +127,7 @@ outputs <- list()
 
 # Main
 
-Something here...
+This is the main learning loop for SeGuL.
 
 ```{r main}
 # Main loop for SeGuL algorithm
@@ -164,9 +164,7 @@ for(i in c("EW50","EW27", "EW5","XOR")){
 
 # Results
 
-We start by looking at the correlation matrix of the $3000$ cases generated during the simulation. The random number generator we used in 1993 was not great and it took some work to ensure that none of the pairs ($x_1,..,x_6$) had an $r>.05$.  In this data set, the maximum off-diagonal correlation was `r round(max(cor(db[9:3008, ])[abs(cor(db[9:3008, ]))<1]), 3)`.
-
-We then need to determine (i) the proportion of positive cases (according to each )
+We start by looking at the correlation matrix of the $3000$ cases generated during the simulation. The random number generator we used in 1993 was not great and it took some work to ensure that none of the possible pairs drawn from $x_1,..,x_6$ had an $r>.05$.  In this data set, the maximum off-diagonal correlation was `r round(max(cor(db[9:3008, ])[abs(cor(db[9:3008, ]))<1]), 3)`.
 
 ## Table 2
 
